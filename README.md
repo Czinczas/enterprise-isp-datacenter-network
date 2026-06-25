@@ -19,8 +19,6 @@ This project demonstrates the deployment of a scalable enterprise network connec
 
 # Network Topology
 
-> *(Insert topology image here)*
-
 The topology consists of:
 
 - Enterprise Campus Network
@@ -102,14 +100,3 @@ The topology consists of:
 ✔ DHCP Services
 
 ✔ NAT/PAT Internet Access
-Internet
-↓
-ISP1 -------- ISP2
-↓
-Core
-↓
-Distribution
-↓
-Access
-↓
-Data Center
