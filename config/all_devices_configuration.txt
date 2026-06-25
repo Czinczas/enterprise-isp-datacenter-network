@@ -1,0 +1,782 @@
+!!!ISP1-1!!!
+
+hostname ISP1-1
+
+interface e0/1
+ ip address 10.10.114.1 255.255.255.0
+ no shutdown
+
+interface e0/3
+ ip address 10.10.115.1 255.255.255.0
+ no shutdown
+
+interface e1/0
+ ip address 10.10.112.1 255.255.255.0
+ no shutdown
+
+interface e0/2
+ ip address 10.10.113.1 255.255.255.0
+ no shutdown
+
+router eigrp 1
+ no auto-summary
+ network 10.10.112.0 0.0.0.255
+ network 10.10.113.0 0.0.0.255
+ network 10.10.114.0 0.0.0.255
+ network 10.10.115.0 0.0.0.255
+
+!!!ISP1-2!!!
+
+hostname ISP1-2
+
+interface e0/1
+ ip address 10.10.123.2 255.255.255.0
+ no shutdown
+
+interface e1/0
+ ip address 10.10.112.2 255.255.255.0
+ no shutdown
+
+interface e0/2
+ ip address 10.10.122.2 255.255.255.0
+ no shutdown
+
+interface e0/0
+ ip address 10.10.132.2 255.255.255.0
+ no shutdown
+
+router eigrp 1
+ no auto-summary
+ network 10.10.112.0 0.0.0.255
+ network 10.10.123.0 0.0.0.255
+ network 10.10.132.0 0.0.0.255
+ redistribute bgp 6000 metric 10000 1 255 1 1500
+ 
+router bgp 6000
+ neighbor 10.10.122.1 remote-as 7000
+ neighbor 10.10.122.1 description ISP2
+ address-family ipv4
+  neighbor 10.10.122.1 activate
+  redistribute eigrp 1
+ 
+!!!ISP1-3!!!
+
+hostname ISP1-3
+
+int e0/2
+ ip address 10.10.113.3 255.255.255.0
+ no shut
+
+int e0/0
+ ip address 10.10.132.3 255.255.255.0
+ no shut
+
+int e0/1
+ ip address 10.10.103.3 255.255.255.0
+ no shut
+
+router eigrp 1
+ no auto-summary
+ network 10.10.113.0 0.0.0.255
+ network 10.10.132.0 0.0.0.255
+ network 10.10.103.0 0.0.0.255
+ 
+!!!ISP2!!!
+
+hostname ISP2
+
+interface e0/2
+ ip address 10.10.122.1 255.255.255.0
+ no shutdown
+
+interface e0/1
+ ip address dhcp
+ no shutdown
+
+interface e0/0
+ ip address 10.10.229.1 255.255.255.0
+ no shutdown
+
+router bgp 7000
+ neighbor 10.10.122.2 remote-as 6000
+ neighbor 10.10.122.2 description ISP1-2
+ address-family ipv4
+  neighbor 10.10.122.2 activate
+  network 0.0.0.0
+  redistribute connected
+  
+#PAT
+access-list 100 permit ip 10.0.0.0 0.255.255.255 any
+access-list 100 permit ip 172.16.0.0 0.15.255.255 any
+access-list 100 permit ip 192.168.0.0 0.0.255.255 any
+
+interface e0/0
+ ip nat inside
+interface e0/2
+ ip nat inside
+interface e0/1
+ ip nat outside
+
+ip nat inside source list 100 interface e0/1 overload
+
+!!!R5!!!
+
+hostname R5
+
+interface e0/3
+ ip address 10.10.115.5 255.255.255.0
+ duplex full
+ no shutdown
+interface e0/0
+ ip address 10.10.58.5 255.255.255.0
+ duplex full
+
+interface tunnel 0
+ ip address 10.255.59.1 255.255.255.252
+ tunnel source e0/3
+ tunnel destination 10.10.229.9
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ no shutdown
+ 
+ip route 0.0.0.0 0.0.0.0 10.10.115.1 #provizoriu sa verific ca se ridica tunnelu inainte sa fac OSPF ul
+
+#partea de IPsec over GRE
+ip access-list extended GRE-TRAFFIC #acl pt traficu de GRE
+ permit gre host 10.10.115.5 host 10.10.229.9
+#PHASE 1
+crypto isakmp policy 10
+ encr aes
+ hash sha
+ authentication pre-share
+ group 2
+crypto isakmp key cisco address 10.10.229.9
+#PHASE 2
+crypto ipsec transform-set TS esp-aes esp-sha-hmac
+ mode transport
+#Crypto map
+crypto map CMAP 10 ipsec-isakmp
+ set peer 10.10.229.9
+ set transform-set TS
+ match address GRE-TRAFFIC
+interface e0/3
+ crypto map CMAP
+#OSPF peste tunel
+router ospf 1
+ router-id 5.5.5.5
+ passive-interface default
+ no passive-interface tunnel 0
+ network 10.255.59.0 0.0.0.3 area 0
+#OSPF area 0
+router ospf 1
+ network 10.10.58.0 0.0.0.255 area 0
+ no passive-interface e0/0
+ default-information originate
+
+#PAT
+ip access-list standard NAT-R5
+ permit 192.168.0.0 0.0.255.255
+ permit 172.16.0.0 0.0.255.255
+
+interface e0/0
+ ip nat inside
+interface tunnel0
+ ip nat inside
+interface e0/3
+ ip nat outside
+
+ip nat inside source list NAT-R5 interface e0/3 overload
+
+!!!R9!!!
+
+hostname R9
+interface e0/0
+ ip address 10.10.229.9 255.255.255.0
+ duplex full
+ no shutdown
+interface e0/1
+ ip address 192.168.9.9 255.255.255.0
+ no shutdown
+interface tunnel 0
+ ip address 10.255.59.2 255.255.255.252
+ tunnel source e0/0
+ tunnel destination 10.10.115.5
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ no shutdown
+ 
+ip route 0.0.0.0 0.0.0.0 10.10.229.1 #provizoriu sa verific ca se ridica tunnelu inainte sa fac OSPF ul
+
+#partea de IPsec over GRE
+ip access-list extended GRE-TRAFFIC #acl pt traficu de GRE 
+ permit gre host 10.10.229.9 host 10.10.115.5
+#PHASE 1
+crypto isakmp policy 10
+ encr aes
+ hash sha
+ authentication pre-share
+ group 2
+crypto isakmp key cisco address 10.10.115.5
+#PHASE 2
+crypto ipsec transform-set TS esp-aes esp-sha-hmac
+ mode transport
+#Crypto map
+crypto map CMAP 10 ipsec-isakmp
+ set peer 10.10.115.5
+ set transform-set TS
+ match address GRE-TRAFFIC
+interface e0/0
+ crypto map CMAP
+#OSPF peste tunel
+router ospf 1
+ router-id 9.9.9.9
+ passive-interface default
+ no passive-interface tunnel 0
+ network 10.255.59.0 0.0.0.3 area 0
+
+#Config OSPF Area 2 STD
+router ospf 1
+ network 192.168.9.0 0.0.0.255 area 2
+ 
+#DHCP SRV
+
+service dhcp
+ip dhcp excluded-address 192.168.6.1 192.168.6.20
+ip dhcp excluded-address 192.168.7.1 192.168.7.20
+ip dhcp pool LAN_AREA3
+ network 192.168.6.0 255.255.255.0
+ default-router 192.168.6.6
+ dns-server 8.8.8.8
+ip dhcp pool LAN_AREA4
+  network 192.168.7.0 255.255.255.0
+  default-router 192.168.7.7
+  dns-server 8.8.8.8
+
+#PAT
+ip access-list standard NAT-R9
+ permit 192.168.9.0 0.0.0.255
+
+interface e0/1
+ ip nat inside
+
+interface e0/0
+ ip nat outside
+
+ip nat inside source list NAT-R9 interface e0/0 overload
+
+!!!R3!!!
+
+hostname R3
+
+interface e0/1
+ ip address 10.10.123.3 255.255.255.0
+ no shutdown
+ duplex full
+
+interface tunnel 1
+ ip address 10.255.60.1 255.255.255.252
+ tunnel source e0/1
+ tunnel destination 10.10.103.10
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ no shutdown
+
+interface e0/0
+ ip address 10.10.13.3 255.255.255.0
+ no shut
+ duplex full
+ 
+ip route 0.0.0.0 0.0.0.0 10.10.123.2 #provizoriu sa verific ca se ridica tunnelu inainte sa fac OSPF ul
+									  -dar, ramana pana la urma ca trb sa lasam si o ruta default spre ISP1-2
+router ospf 1 #anuntam default in ospf, punctu 8, astfel incat R1 sa isi primeasca def. route prin OSPF
+ default-information originate
+
+#partea de IPsec over GRE
+ip access-list extended GRE-R3-R10 #acl pt traficu de GRE
+ permit gre host 10.10.123.3 host 10.10.103.10
+#PHASE 1
+crypto isakmp policy 10
+ encr aes
+ hash sha
+ authentication pre-share
+ group 2
+crypto isakmp key cisco address 10.10.103.10
+#PHASE 2
+crypto ipsec transform-set TS esp-aes esp-sha-hmac
+ mode transport
+#Crypto map
+crypto map CMAP 10 ipsec-isakmp
+ set peer 10.10.103.10
+ set transform-set TS
+ match address GRE-R3-R10
+interface e0/1
+ crypto map CMAP
+#OSPF peste tunel
+router ospf 1
+ router-id 3.3.3.3
+ passive-interface default
+ no passive-interface tunnel1
+ network 10.255.60.0 0.0.0.3 area 0
+#OSPF Area 1
+router ospf 1
+ network 10.10.13.0 0.0.0.255 area 1
+
+#PAT
+ip access-list standard NAT-R3
+ permit 192.168.0.0 0.0.255.255
+interface e0/0
+ ip nat inside
+interface e0/1
+ ip nat outside
+ip nat inside source list NAT-R3 interface e0/1 overload
+
+!!!R10!!!
+
+hostname R10
+interface e0/1
+ ip address 10.10.103.10 255.255.255.0
+ no shutdown
+ duplex full
+interface e0/0
+ ip address 172.16.10.10 255.255.255.0
+ no shut
+ duplex full
+ 
+interface tunnel 1
+ ip address 10.255.60.2 255.255.255.252
+ tunnel source e0/1
+ tunnel destination 10.10.123.3
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ no shutdown
+ 
+ip route 0.0.0.0 0.0.0.0 10.10.103.3 #provizoriu sa verific ca se ridica tunnelu inainte sa fac OSPF ul
+
+#partea de IPsec over GRE
+ip access-list extended GRE-R3-R10 #acl pt traficu de GRE
+ permit gre host 10.10.103.10 host 10.10.123.3
+#PHASE 1
+crypto isakmp policy 10
+ encr aes
+ hash sha
+ authentication pre-share
+ group 2
+crypto isakmp key cisco address 10.10.123.3
+#PHASE 2
+crypto ipsec transform-set TS esp-aes esp-sha-hmac
+ mode transport
+#Crypto map
+crypto map CMAP 10 ipsec-isakmp
+ set peer 10.10.123.3
+ set transform-set TS
+ match address GRE-R3-R10
+interface e0/1
+ crypto map CMAP
+#OSPF peste tunel
+router ospf 1
+ router-id 10.10.10.10
+ passive-interface default
+ no passive-interface tunnel1
+ network 10.255.60.0 0.0.0.3 area 0
+
+#PAT
+access-list 10 permit 172.16.10.0 0.0.0.255
+
+interface e0/0
+ ip nat inside
+interface e0/1
+ ip nat outside
+
+ip nat inside source list 10 interface e0/1 overload
+ 
+!!!R6!!!
+
+hostname R6
+
+interface e0/0
+ ip address 192.168.6.6 255.255.255.0
+ no shutdown
+ ip helper-address 192.168.9.9
+interface e0/1
+ ip address 10.10.68.6 255.255.255.0
+ no shut
+
+#OSPF Area 3 Stub
+router ospf 1
+ router-id 6.6.6.6
+ network 10.10.68.0 0.0.0.255 area 3
+ network 192.168.6.0 0.0.0.255 area 3
+ area 3 stub
+
+
+
+!!!R8!!!
+
+hostname R8
+
+interface e0/1
+ ip address 10.10.68.8 255.255.255.0
+ no shut
+interface e0/0
+ ip address 10.10.58.8 255.255.255.0
+ no shut
+ duplex full
+interface e0/2
+ ip address 10.10.78.8 255.255.255.0
+ no shut
+
+#OSPF Area 0 <-> Area 3(Stub)
+router ospf 1
+ router-id 8.8.8.8
+ network 10.10.58.0 0.0.0.255 area 0
+ network 10.10.68.0 0.0.0.255 area 3
+ area 3 stub
+#OSPF Area 4
+router ospf 1
+ network 10.10.78.0 0.0.0.255 area 4
+ area 4 stub no-summary
+ 
+ 
+!!!R7!!!
+
+hostname R7
+
+interface e0/2
+ ip address 10.10.78.7 255.255.255.0
+ no shut
+interface e0/0
+ ip address 192.168.7.7 255.255.255.0
+ no shut
+ ip helper-address 192.168.9.9
+
+#OSPF Area 4 Totally Stub
+router ospf 1
+ router-id 7.7.7.7
+ network 10.10.78.0 0.0.0.255 area 4
+ network 192.168.7.0 0.0.0.255 area 4
+ area 4 stub #nu punem aici t.stubby(no-summary), o sa punem pe ABR(R8) astfel incat sa facem ca R7 sa primeasca doar default route, nu primeste inter-area LSAs, facand asta sa avem o tabela mai clean pe R7
+ 
+!!!R1!!!
+
+hostname R1
+
+interface e0/0
+ ip address 10.10.13.1 255.255.255.0
+ no shut
+ duplex full
+
+#OSPF Area 1
+router ospf 1
+ router-id 1.1.1.1
+ network 10.10.13.0 0.0.0.255 area 1
+ network 192.168.10.0 0.0.0.255 area 1
+ network 192.168.20.0 0.0.0.255 area 1
+ network 192.168.30.0 0.0.0.255 area 1
+ network 192.168.40.0 0.0.0.255 area 1
+#HSRP
+interface e1/2
+ no shutdown
+
+interface e1/2.10
+ encapsulation dot1q 10
+ ip address 192.168.10.1 255.255.255.0
+ standby 10 ip 192.168.10.67
+ standby 10 priority 110
+ standby 10 preempt
+
+interface e1/2.20
+ encapsulation dot1q 20
+ ip address 192.168.20.1 255.255.255.0
+ standby 20 ip 192.168.20.67
+ standby 20 priority 110
+ standby 20 preempt
+
+interface e1/2.30
+ encapsulation dot1q 30
+ ip address 192.168.30.1 255.255.255.0
+ standby 30 ip 192.168.30.67
+ standby 30 priority 90
+ standby 30 preempt
+
+interface e1/2.40
+ encapsulation dot1q 40
+ ip address 192.168.40.1 255.255.255.0
+ standby 40 ip 192.168.40.67
+ standby 40 priority 90
+ standby 40 preempt
+ 
+
+!!!R2!!!
+
+hostname R2
+
+interface e0/0
+ ip address 10.10.24.2 255.255.255.0
+ no shut
+#OSPF Area 1
+router ospf 1
+ router-id 2.2.2.2
+ network 10.10.24.0 0.0.0.255 area 1
+ network 192.168.10.0 0.0.0.255 area 1
+ network 192.168.20.0 0.0.0.255 area 1
+ network 192.168.30.0 0.0.0.255 area 1
+ network 192.168.40.0 0.0.0.255 area 1
+ 
+interface e1/2
+ no shutdown
+
+interface e1/2.10
+ encapsulation dot1q 10
+ ip address 192.168.10.2 255.255.255.0
+ standby 10 ip 192.168.10.67
+ standby 10 priority 90
+ standby 10 preempt
+
+interface e1/2.20
+ encapsulation dot1q 20
+ ip address 192.168.20.2 255.255.255.0
+ standby 20 ip 192.168.20.67
+ standby 20 priority 90
+ standby 20 preempt
+
+interface e1/2.30
+ encapsulation dot1q 30
+ ip address 192.168.30.2 255.255.255.0
+ standby 30 ip 192.168.30.67
+ standby 30 priority 110
+ standby 30 preempt
+
+interface e1/2.40
+ encapsulation dot1q 40
+ ip address 192.168.40.2 255.255.255.0
+ standby 40 ip 192.168.40.67
+ standby 40 priority 110
+ standby 40 preempt
+ 
+!!!R4!!!
+
+hostname R4
+
+interface e0/0
+ ip address 10.10.24.4 255.255.255.0
+ no shut
+interface e0/1
+ ip address 10.10.114.4 255.255.255.0
+ no shut
+
+#OSPF Area 1
+router ospf 1
+ router-id 4.4.4.4
+ network 10.10.24.0 0.0.0.255 area 1
+ 
+ip route 0.0.0.0 0.0.0.0 10.10.114.1 #ruta default spre ISP1-1
+
+router ospf 1 #anuntam default in ospf, punctu 8, astfel incat R2 sa isi primeasca def. route prin OSPF
+ default-information originate 
+
+#PAT
+ip access-list standard NAT-R4
+ permit 192.168.0.0 0.0.255.255
+
+interface e0/0
+ ip nat inside
+interface e0/1
+ ip nat outside
+
+ip nat inside source list NAT-R4 interface e0/1 overload
+ 
+#SWITCHES CONFIG
+
+!!!SW1!!!
+
+vlan 10
+ name VLAN10
+vlan 20
+ name VLAN20
+vlan 30
+ name VLAN30
+vlan 40
+ name VLAN40
+
+interface e1/0
+ switchport mode access
+ switchport access vlan 10
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+interface e1/1
+ switchport mode access
+ switchport access vlan 20
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ 
+interface range e0/0-1
+ channel-group 1 mode active
+interface port-channel 1
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+
+interface range e0/2-3
+ channel-group 2 mode active
+interface port-channel 2
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+
+spanning-tree mode rapid-pvst
+
+!!!SW2!!!
+
+vlan 10
+ name VLAN10
+vlan 20
+ name VLAN20
+vlan 30
+ name VLAN30
+vlan 40
+ name VLAN40
+ 
+interface e1/0
+ switchport mode access
+ switchport access vlan 30
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+interface e1/1
+ switchport mode access
+ switchport access vlan 40
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+
+interface range e0/0-1
+ channel-group 1 mode active
+interface port-channel 1
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+
+interface range e0/2-3
+ channel-group 2 mode active
+interface port-channel 2
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+
+spanning-tree mode rapid-pvst
+
+!!!SW3!!!
+
+vlan 10
+ name VLAN10
+vlan 20
+ name VLAN20
+vlan 30
+ name VLAN30
+vlan 40
+ name VLAN40
+ 
+interface range e0/0-1 
+ channel-group 1 mode active
+interface port-channel 1
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+
+interface range e0/2-3 
+ channel-group 2 mode active
+interface port-channel 2
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+
+interface range e1/0-1 
+ channel-group 3 mode active
+interface port-channel 3
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+
+interface e1/2
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+ no shutdown
+
+spanning-tree mode rapid-pvst
+spanning-tree vlan 10,20 root primary
+spanning-tree vlan 30,40 root secondary
+
+!!!SW4!!!
+
+vlan 10
+ name VLAN10
+vlan 20
+ name VLAN20
+vlan 30
+ name VLAN30
+vlan 40
+ name VLAN40
+
+interface range e0/0-1 
+ channel-group 1 mode active
+interface port-channel 1
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+
+interface range e0/2-3
+ channel-group 2 mode active
+interface port-channel 2
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+ 
+interface range e1/0-1 
+ channel-group 3 mode active
+interface port-channel 3
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+ 
+spanning-tree mode rapid-pvst
+spanning-tree vlan 30,40 root primary
+spanning-tree vlan 10,20 root secondary
+
+interface e1/2
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+ no shutdown
+ 
+#PCs CONFIG
+
+!!!Toolbox-1!!!
+
+ifconfig eth0 192.168.10.10 netmask 255.255.255.0
+route add default gw 192.168.10.67 dev eth0
+
+!!!Toolbox-4!!!
+
+ifconfig eth0 192.168.30.30 netmask 255.255.255.0
+route add default gw 192.168.30.67 dev eth0
+
+!!!PC6!!!
+auto eth0
+iface eth0 inet dhcp
+
+!!!PC7!!!
+auto eth0
+iface eth0 inet dhcp
+
+!!!Toolbox-2!!!
+
+ifconfig eth0 172.16.10.100 netmask 255.255.255.0
+route add default gw 172.16.10.10 dev eth0
+
+!!!Toolbox-3!!!
+
+ifconfig eth0 192.168.9.99 netmask 255.255.255.0
+route add default gw 192.168.9.9 dev eth0
+
+
+
+#copy run tftp: - nu merge no ideea :D
