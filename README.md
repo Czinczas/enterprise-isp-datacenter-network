@@ -100,3 +100,51 @@ The topology consists of:
 ✔ DHCP Services
 
 ✔ NAT/PAT Internet Access
+
+# Skills Demonstrated
+
+- Enterprise Network Design
+- Routing & Switching
+- Network Troubleshooting
+- Cisco IOS Configuration
+- Network Documentation
+- High Availability
+- Secure Site-to-Site Connectivity
+- Layer 2 & Layer 3 Design
+- Infrastructure Validation
+
+---
+
+# Lessons Learned
+
+This project significantly strengthened my practical networking skills by integrating multiple technologies into a single production-like environment.
+
+Beyond configuring individual protocols, the project emphasized understanding how routing, switching, redundancy, and security mechanisms interact in a complete enterprise infrastructure.
+
+It also improved my troubleshooting methodology through extensive validation using routing tables, neighbor relationships, packet captures, and end-to-end connectivity testing.
+
+---
+
+# Future Improvements
+
+Future versions of this project may include:
+
+- IPv6 implementation
+- Network Automation using Python
+- Ansible Playbooks
+- Infrastructure as Code
+- Docker-based network services
+- Monitoring with Grafana & Prometheus
+- Migration towards Cloud Networking
+
+---
+
+## Author
+
+**Alex Czinczas**
+
+Network Engineer
+
+AWS Certified Cloud Practitioner
+
+Currently expanding into Linux, Cloud & DevOps.
